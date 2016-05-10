@@ -1,0 +1,50 @@
+---
+- hosts: tag_Name_[f|F]ilebeat*
+  vars:
+    temp_dir: /tmp/filebeat_stage/
+    source: /tmp/filebeat_stage/filebeat_stage-master/files/
+    cert: /etc/pki/tls/certs/
+    filebeat_config: /etc/filebeat/
+
+  remote_user: ubuntu
+  sudo: yes
+
+  tasks:
+    - name: Add repositories
+      apt_repository: repo='deb https://packages.elastic.co/beats/apt stable main' state=present
+
+    - name: Import elastic key
+      apt_key: url=https://packages.elastic.co/GPG-KEY-elasticsearch state=present validate_certs=yes
+
+    - name: Install filebeat
+      apt: name=filebeat update_cache=yes state=latest force=yes
+
+    - name: Create Temp directory in /tmp/filebeat_stage
+      file: path={{ temp_dir }} state=directory mode=0755
+
+    - name: Download filebeat configs from Github
+      command:  wget --directory-prefix={{ temp_dir }} https://github.com/rojar/filebeat_stage/archive/master.zip
+
+    - name: Install unzip
+      apt: name=unzip update_cache=yes state=latest force=yes
+
+    - name: Unzip config files
+      unarchive: src={{ temp_dir }}master.zip dest={{ temp_dir }} copy=no
+
+    - name: Creates Certs directory
+      file: path={{ cert }} state=directory mode=0755
+
+    - name: Copy certificate
+      command: cp {{ source }}logstash-forwarder.crt {{ cert }}logstash-forwarder.crt
+
+    - name: Copy filebeat config file
+      command: cp {{ source }}filebeat.yml {{ filebeat_config }}filebeat.yml
+      notify:
+           - restart filebeat
+
+    - name: restart filebeat
+      service: name=filebeat state=restarted
+   
+    - name: Remove temp files
+#      command: rm -rf {{ temp_dir }}
+      file: path={{ temp_dir }} state=absent
